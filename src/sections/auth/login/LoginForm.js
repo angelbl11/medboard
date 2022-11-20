@@ -38,7 +38,7 @@ export default function LoginForm() {
   return (
     <form onSubmit={handleClick}>
       <Stack spacing={3}>
-        <TextField name="email" label="Correo electrónico" onChange={(e) => setEmail(e.target.value)} />
+        <TextField type={'email'} name="email" label="Correo electrónico" onChange={(e) => setEmail(e.target.value)} />
 
         <TextField
           name="password"

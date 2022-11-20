@@ -2,6 +2,7 @@ import { Helmet } from 'react-helmet-async';
 import { filter } from 'lodash';
 import { sentenceCase } from 'change-case';
 import { useState } from 'react';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 // @mui
 import {
   Card,
@@ -21,11 +22,23 @@ import {
   IconButton,
   TableContainer,
   TablePagination,
+  Dialog,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
+  TextField,
+  DialogActions,
+  FormControl,
+  InputLabel,
+  Select,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 // components
 import Label from '../components/label';
 import Iconify from '../components/iconify';
 import Scrollbar from '../components/scrollbar';
+import { db } from '../firebase';
 // sections
 import { UserListHead, UserListToolbar } from '../sections/@dashboard/user';
 // mock
@@ -34,11 +47,13 @@ import USERLIST from '../_mock/user';
 // ----------------------------------------------------------------------
 
 const TABLE_HEAD = [
-  { id: 'name', label: 'Name', alignRight: false },
-  { id: 'company', label: 'Company', alignRight: false },
-  { id: 'role', label: 'Role', alignRight: false },
-  { id: 'isVerified', label: 'Verified', alignRight: false },
-  { id: 'status', label: 'Status', alignRight: false },
+  { id: 'name', label: 'Nombre', alignRight: false },
+  { id: 'company', label: 'Tipo', alignRight: false },
+  { id: 'role', label: 'Laboratorio', alignRight: false },
+  { id: 'isVerified', label: 'Gramaje', alignRight: false },
+  { id: '', label: 'Estatus', alignRight: false },
+  { id: '', label: 'Caducidad', alignRight: false },
+  { id: '', label: 'Disponibles', alignRight: false },
   { id: '' },
 ];
 
@@ -72,9 +87,43 @@ function applySortFilter(array, comparator, query) {
   }
   return stabilizedThis.map((el) => el[0]);
 }
+const useForm = (initialState = {}) => {
+  const [formValues, setFormValues] = useState(initialState);
+  const resetForm = () => {
+    setFormValues(initialState);
+  };
+  const handleInputChange = (event) => {
+    const { target } = event;
 
+    let newValue = null;
+
+    if (target.type === 'checkbox') {
+      newValue = target.checked;
+    } else if (target.type === 'file') {
+      newValue = target.files[0];
+    } else {
+      newValue = target.value;
+    }
+
+    setFormValues((prevValues) => ({
+      ...prevValues,
+      [target.name]: newValue,
+    }));
+  };
+  return { formValues, handleInputChange, resetForm, setForm: setFormValues };
+};
 export default function UserPage() {
+  const { formValues, handleInputChange } = useForm({
+    medname: '',
+    medtype: '',
+    medlab: '',
+    medgrams: '',
+    medstatus: '',
+    medcaducity: '',
+    medstock: '',
+  });
   const [open, setOpen] = useState(null);
+  const [openSnackbar, setOpenSnackBar] = useState(false);
 
   const [page, setPage] = useState(0);
 
@@ -88,14 +137,37 @@ export default function UserPage() {
 
   const [rowsPerPage, setRowsPerPage] = useState(5);
 
+  const [openDialog, setOpenDialog] = useState(false);
   const handleOpenMenu = (event) => {
     setOpen(event.currentTarget);
   };
-
+  const handleClose = (event, reason) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setOpenSnackBar(false);
+  };
+  const handleClickOpen = () => {
+    setOpenDialog(true);
+  };
+  const handleAddMed = async (e) => {
+    e.preventDefault();
+    try {
+      await addDoc(collection(db, 'meds'), {
+        formValues,
+        timeStamp: serverTimestamp(),
+      });
+      setOpenSnackBar(true);
+    } catch (e) {
+      console.log(e);
+    }
+  };
   const handleCloseMenu = () => {
     setOpen(null);
   };
-
+  const handleCloseDialog = () => {
+    setOpenDialog(false);
+  };
   const handleRequestSort = (event, property) => {
     const isAsc = orderBy === property && order === 'asc';
     setOrder(isAsc ? 'desc' : 'asc');
@@ -110,7 +182,6 @@ export default function UserPage() {
     }
     setSelected([]);
   };
-
   const handleClick = (event, name) => {
     const selectedIndex = selected.indexOf(name);
     let newSelected = [];
@@ -155,13 +226,80 @@ export default function UserPage() {
       <Container>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={5}>
           <Typography variant="h4" gutterBottom>
-            User
+            Medicamentos
           </Typography>
-          <Button variant="contained" startIcon={<Iconify icon="eva:plus-fill" />}>
-            New User
+          <Button onClick={handleClickOpen} variant="contained" startIcon={<Iconify icon="eva:plus-fill" />}>
+            Nuevo Medicamento
           </Button>
+          <Dialog open={openDialog} onClose={handleCloseDialog}>
+            <DialogTitle>Agregar medicamento</DialogTitle>
+            <DialogContent>
+              <DialogContentText>Anexa los datos del nuevo medicamento</DialogContentText>
+              <Stack spacing={3}>
+                <TextField
+                  name="medname"
+                  label="Nombre"
+                  required
+                  onChange={handleInputChange}
+                  value={formValues.medname}
+                />
+                <TextField
+                  name="medtype"
+                  label="Tipo"
+                  required
+                  onChange={handleInputChange}
+                  value={formValues.medtype}
+                />
+                <TextField
+                  name="medlab"
+                  label="Laboratorio"
+                  required
+                  onChange={handleInputChange}
+                  value={formValues.medlab}
+                />
+                <TextField
+                  name="medgrams"
+                  label="Gramaje"
+                  required
+                  onChange={handleInputChange}
+                  value={formValues.medgrams}
+                />
+                <FormControl fullWidth>
+                  <InputLabel>Estatus</InputLabel>
+                  <Select name="medstatus" label="Estatus" onChange={handleInputChange} value={formValues.medstatus}>
+                    <MenuItem value={'stock'}>En stock</MenuItem>
+                    <MenuItem value={'out'}>Agotado</MenuItem>
+                  </Select>
+                </FormControl>
+                <TextField
+                  name="medcaducity"
+                  label="Caducidad"
+                  type={'date'}
+                  onChange={handleInputChange}
+                  value={formValues.medcaducity}
+                  required
+                />
+                <TextField
+                  name="medstock"
+                  label="Disponibles"
+                  type={'number'}
+                  onChange={handleInputChange}
+                  value={formValues.medstock}
+                  required
+                />
+              </Stack>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={handleCloseDialog}>Cancelar</Button>
+              <Button onClick={handleAddMed}>Crear</Button>
+            </DialogActions>
+          </Dialog>
+          <Snackbar onClose={handleClose}>
+            <Alert onClose={handleClose} severity="success" sx={{ width: '100%' }}>
+              Medicamento creado
+            </Alert>
+          </Snackbar>
         </Stack>
-
         <Card>
           <UserListToolbar numSelected={selected.length} filterName={filterName} onFilterName={handleFilterByName} />
 
@@ -206,7 +344,8 @@ export default function UserPage() {
                         <TableCell align="left">
                           <Label color={(status === 'banned' && 'error') || 'success'}>{sentenceCase(status)}</Label>
                         </TableCell>
-
+                        <TableCell align="left">{role}</TableCell>
+                        <TableCell align="left">{role}</TableCell>
                         <TableCell align="right">
                           <IconButton size="large" color="inherit" onClick={handleOpenMenu}>
                             <Iconify icon={'eva:more-vertical-fill'} />
